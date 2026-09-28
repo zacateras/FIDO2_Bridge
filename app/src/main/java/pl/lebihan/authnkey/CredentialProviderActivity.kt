@@ -215,8 +215,41 @@ class CredentialProviderActivity : AppCompatActivity() {
             return
         }
 
+        // Diagnostic only: log the shape of PRF-related extensions without
+        // logging challenges, salts, credential IDs, PINs, or PRF outputs.
+        logPrfRequestShape(requestJson!!)
+
         // Check if PIN is likely required based on userVerification preference
         checkPinRequirement()
+    }
+
+    private fun logPrfRequestShape(requestJson: String) {
+        try {
+            val json = JSONObject(requestJson)
+            val extensions = json.optJSONObject("extensions")
+            val prf = extensions?.optJSONObject("prf")
+            val prfAlreadyHashed = extensions?.optJSONObject("prfAlreadyHashed")
+
+            val extensionKeys = mutableListOf<String>()
+            extensions?.keys()?.let { keys ->
+                while (keys.hasNext()) extensionKeys.add(keys.next())
+            }
+
+            Log.i(
+                PRF_DIAGNOSTIC_TAG,
+                "requestType=${if (isCreateRequest) "create" else "get"} " +
+                    "extensionKeys=${extensionKeys.sorted()} " +
+                    "prf=${prf != null} " +
+                    "prf.eval=${prf?.has("eval") == true} " +
+                    "prf.evalByCredential=${prf?.has("evalByCredential") == true} " +
+                    "prfAlreadyHashed=${prfAlreadyHashed != null} " +
+                    "prfAlreadyHashed.eval=${prfAlreadyHashed?.has("eval") == true} " +
+                    "prfAlreadyHashed.evalByCredential=${prfAlreadyHashed?.has("evalByCredential") == true} " +
+                    "clientDataHashPresent=${providedClientDataHash != null}"
+            )
+        } catch (e: Exception) {
+            Log.w(PRF_DIAGNOSTIC_TAG, "Unable to inspect request extension shape: ${e.javaClass.simpleName}")
+        }
     }
 
     private fun showBottomSheet(status: String) {
@@ -1639,6 +1672,7 @@ class CredentialProviderActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "CredProviderActivity"
+        private const val PRF_DIAGNOSTIC_TAG = "FIDOBridgePRF"
         private const val ACTION_USB_PERMISSION = "pl.lebihan.authnkey.CRED_USB_PERMISSION"
 
         // SPKI AlgorithmIdentifier for EC P-256: OID 1.2.840.10045.2.1 + OID 1.2.840.10045.3.1.7
