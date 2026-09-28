@@ -32,12 +32,6 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Accept Android SDK licenses
-        run: yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
-
-      - name: Install Android 37 platform
-        run: /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-37"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
