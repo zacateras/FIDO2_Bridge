@@ -22,7 +22,7 @@ android {
 
     buildTypes {
         debug {
-            applicationIdSuffix = ".dev"
+            applicationIdSuffix = ".prffix"
             versionNameSuffix = "-dev"
             isMinifyEnabled = false
             isShrinkResources = false
