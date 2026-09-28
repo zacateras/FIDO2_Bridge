@@ -936,7 +936,14 @@ class CredentialProviderActivity : AppCompatActivity() {
         // Parse extensions
         val extensions = requestJson.optJSONObject("extensions")
         val credPropsRequested = extensions?.optBoolean("credProps", false) ?: false
-        val prfRequested = extensions?.has("prf") == true
+        val prfPresent = extensions?.has("prf") == true
+        val prfAlreadyHashedPresent = extensions?.has("prfAlreadyHashed") == true
+
+        if (prfPresent && prfAlreadyHashedPresent) {
+            throw IllegalArgumentException("Both prf and prfAlreadyHashed extensions are present")
+        }
+
+        val prfRequested = prfPresent || prfAlreadyHashedPresent
 
         // Check if authenticator supports hmac-secret (CTAP2 backing for PRF)
         val authenticatorSupportsHmacSecret = ctapSession?.deviceInfo?.extensions?.contains("hmac-secret") == true
