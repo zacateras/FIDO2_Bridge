@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - diagnostic/prf-hybrid
+      - fix/prf-already-hashed
     paths:
       - "app/**"
       - "gradle/**"
