@@ -1149,10 +1149,18 @@ class CredentialProviderActivity : AppCompatActivity() {
             }
         } else emptyList()
 
-        // Parse PRF extension
+        // Parse PRF extension.
+        //
+        // Android synthesizes "prfAlreadyHashed" for requests received over
+        // hybrid/cross-device transport. It has the same shape as WebAuthn
+        // "prf", but its evaluation points are already transformed to the
+        // 32-byte CTAP2 hmac-secret salts and MUST NOT be hashed again.
         val extensions = requestJson.optJSONObject("extensions")
         val prfExtension = extensions?.optJSONObject("prf")
-        val prfEval = prfExtension?.optJSONObject("eval")
+        val prfAlreadyHashedExtension = extensions?.optJSONObject("prfAlreadyHashed")
+        val prfInputsAlreadyHashed = prfExtension == null && prfAlreadyHashedExtension != null
+        val effectivePrfExtension = prfExtension ?: prfAlreadyHashedExtension
+        val prfEval = effectivePrfExtension?.optJSONObject("eval")
         val authenticatorSupportsHmacSecret = ctapSession?.deviceInfo?.extensions?.contains("hmac-secret") == true
         val prfRequested = prfEval != null && authenticatorSupportsHmacSecret
 
@@ -1177,32 +1185,49 @@ class CredentialProviderActivity : AppCompatActivity() {
             }
             val prfState = prfKeyAgreement
 
-            // Extract and convert PRF salts to hmac-secret salts
-            // PRF salt → hmac-secret salt: SHA-256("WebAuthn PRF" || 0x00 || salt)
+            // Convert PRF inputs to CTAP2 hmac-secret salts.
+            //
+            // Normal WebAuthn PRF inputs need the WebAuthn PRF prefix/hash.
+            // Hybrid prfAlreadyHashed inputs are already exactly those 32-byte
+            // values, so hashing them again would produce a different PRF.
             val sha256 = MessageDigest.getInstance("SHA-256")
             val prfPrefix = "WebAuthn PRF".toByteArray(Charsets.UTF_8)
 
-            val firstSaltRaw = Base64.decode(
-                prfEval.getString("first"),
-                Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
-            )
-            sha256.reset()
-            sha256.update(prfPrefix)
-            sha256.update(0x00.toByte())
-            val salt1 = sha256.digest(firstSaltRaw)
-
-            var salt2: ByteArray? = null
-            if (prfEval.has("second")) {
-                val secondSaltRaw = Base64.decode(
-                    prfEval.getString("second"),
+            fun toHmacSecretSalt(encodedInput: String): ByteArray {
+                val raw = Base64.decode(
+                    encodedInput,
                     Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP
                 )
+
+                if (prfInputsAlreadyHashed) {
+                    if (raw.size != 32) {
+                        throw IllegalArgumentException(
+                            "prfAlreadyHashed input must be exactly 32 bytes"
+                        )
+                    }
+                    return raw
+                }
+
                 sha256.reset()
                 sha256.update(prfPrefix)
                 sha256.update(0x00.toByte())
-                salt2 = sha256.digest(secondSaltRaw)
+                return sha256.digest(raw)
+            }
+
+            val salt1 = toHmacSecretSalt(prfEval.getString("first"))
+
+            var salt2: ByteArray? = null
+            if (prfEval.has("second")) {
+                salt2 = toHmacSecretSalt(prfEval.getString("second"))
                 prfHasTwoSalts = true
             }
+
+            Log.i(
+                PRF_DIAGNOSTIC_TAG,
+                "prfMode=${if (prfInputsAlreadyHashed) "alreadyHashed" else "webauthn"} " +
+                    "hmacSecretSupported=$authenticatorSupportsHmacSecret " +
+                    "hmacSecretRequested=true twoSalts=$prfHasTwoSalts"
+            )
 
             // Build hmac-secret extension input
             val hmacInput = prfState.buildHmacSecretInput(salt1, salt2)
@@ -1312,6 +1337,10 @@ class CredentialProviderActivity : AppCompatActivity() {
 
             if (hmacSecretOutput != null) {
                 val decrypted = prfKeyAgreement.decryptHmacSecretOutput(hmacSecretOutput)
+                Log.i(
+                    PRF_DIAGNOSTIC_TAG,
+                    "hmacSecretOutput=true decrypted=${decrypted != null}"
+                )
                 if (decrypted != null) {
                     prfResults = JSONObject().apply {
                         val first = decrypted.sliceArray(0 until 32)
