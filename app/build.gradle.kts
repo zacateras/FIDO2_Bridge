@@ -33,6 +33,15 @@ android {
                 "proguard-rules.pro"
             )
         }
+        create("interim") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".prfinterim"
+            versionNameSuffix = "-prf-interim"
+            isDebuggable = false
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
 
     androidResources {
