@@ -1,0 +1,52 @@
+name: Build interim PRF APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - interim/prf-fix-s22
+    paths:
+      - "app/**"
+      - "gradle/**"
+      - "gradlew"
+      - "gradlew.bat"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - ".github/workflows/interim-prf-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-interim-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Accept Android SDK licenses
+        run: yes | /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null
+
+      - name: Install Android 17 SDK
+        run: /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager "platforms;android-37.0" "build-tools;37.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build interim APK
+        run: ./gradlew --no-daemon assembleInterim
+
+      - name: Upload interim APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fido-bridge-prf-interim-apk
+          path: app/build/outputs/apk/interim/app-interim.apk
+          if-no-files-found: error
